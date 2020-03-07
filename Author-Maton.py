@@ -513,24 +513,27 @@ async def on_message(message):
                     connection.close()                 
         elif (command == 'randomslang'):
             print("randomslang called by " + username, flush=True)
-            word = message.content.replace(".randomslang ","")
-            if not word:
-                await message.channel.send("No word specified!")
-                return
-            
-            URL = "http://api.urbandictionary.com/v0/define?term=" + word
-            r = requests.get(url = URL)
-            data = r.json()
-            
-            if not data:
-                await message.channel.send("No slang definition found for " + word)
-                return
-            
-            definition = data["list"][random.randint(0,len(data["list"])-1)]["definition"]
-            definition = definition.replace("[","")
-            definition = definition.replace(']',"")
-            
-            await message.channel.send("**" + word + "**\n\n>>> " + definition)
+            if (message.channel.nsfw):
+                word = message.content.replace(".randomslang ","")
+                if not word:
+                    await message.channel.send("No word specified!")
+                    return
+                
+                URL = "http://api.urbandictionary.com/v0/define?term=" + word
+                r = requests.get(url = URL)
+                data = r.json()
+                
+                if not data:
+                    await message.channel.send("No slang definition found for " + word)
+                    return
+                
+                definition = data["list"][random.randint(0,len(data["list"])-1)]["definition"]
+                definition = definition.replace("[","")
+                definition = definition.replace(']',"")
+                
+                await message.channel.send("**" + word + "**\n\n>>> " + definition)
+            else:
+                await message.channel.send("This is not a NSFW channel. Please issue slang commands in a NSFW channel.")
         elif (command == 'sentences'):
             parsed_string = message.content.replace(".sentences ","")
             get_sentences = """SELECT Sentences FROM SampleSentences WHERE Word=%s AND Sentences IS NOT NULL;"""
@@ -559,24 +562,26 @@ async def on_message(message):
                     connection.close()                 
         elif (command == 'slang'):
             print("slang called by " + username, flush=True)
-            word = message.content.replace(".slang ","")
-            if not word:
-                await message.channel.send("No word specified!")
-                return
-            
-            URL = "http://api.urbandictionary.com/v0/define?term=" + word
-            r = requests.get(url = URL)
-            data = r.json()
-            if not data:
-                await message.channel.send("No definition found for " +word)
-                return
-            
-            definition = data["list"][0]["definition"]
-            definition = definition.replace("[","")
-            definition = definition.replace(']',"")
-            
-            await message.channel.send("**" + word + "**\n\n>>> " + definition)
-        
+            if(message.channel.nsfw):
+                word = message.content.replace(".slang ","")
+                if not word:
+                    await message.channel.send("No word specified!")
+                    return
+                
+                URL = "http://api.urbandictionary.com/v0/define?term=" + word
+                r = requests.get(url = URL)
+                data = r.json()
+                if not data:
+                    await message.channel.send("No definition found for " +word)
+                    return
+                
+                definition = data["list"][0]["definition"]
+                definition = definition.replace("[","")
+                definition = definition.replace(']',"")
+                
+                await message.channel.send("**" + word + "**\n\n>>> " + definition)
+            else:
+                await message.channel.send("This is not a NSFW channel. Please issue slang commands in a NSFW channel.")            
  
         elif (command == 'quiz'):
             print("quiz called by " + username, flush=True)
