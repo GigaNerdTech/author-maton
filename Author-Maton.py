@@ -6,13 +6,13 @@ import subprocess
 import time
 import requests
 import random
-import xml.etree.ElementTree as ET
-import nltk
 from discord.utils import get
+import discord.utils
+from datetime import datetime
 
 client = discord.Client()
-quiz_event = False
-quiz_answer = " "
+quiz_event = { }
+quiz_answer = { }
 quiz_scores = {}
 word_of_the_day_score = 20
 entry_limit = 5
@@ -20,9 +20,32 @@ entry_limit = 5
 @client.event
 async def on_ready():
     global quiz_scores
-    print("Logged in!")
+    global quiz_event
+    print("Logged in!", flush=True)
+    for guild in client.guilds:
+        quiz_event[guild.id] = False
             
-
+@client.event
+async def on_guild_join(guild):
+    global quiz_event
+    print("Joined guild " + guild.name, flush=True)
+    quiz_event[guild.id] = False
+    print("Creating leaderboard...", flush=True)
+    for member in guild.members:
+        try:
+            connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')    
+            create_score_entry = """INSERT INTO QuizScores (ServerId, UserId, Score) VALUES(%s, %s, %s);"""   
+            score_entry = (str(guild.id), str(member.id), str(0))
+            cursor = connection.cursor()
+            result = cursor.execute(create_score_entry, score_entry)
+            connection.commit()
+        except mysql.connector.Error as error:
+            await message.channel.send("Database error! " + str(error))   
+        finally:
+            if(connection.is_connected()):
+                cursor.close()
+                connection.close()
+    print("Done!", flush=True)
    
 @client.event
 async def on_message(message):
@@ -31,31 +54,40 @@ async def on_message(message):
     global quiz_event
     global quiz_scores
     global entry_limit
-    if message.author.bot:
+    global emoji_reaction
+
+    if message.author == client.user:
         return
-    if 'midnight' in message.content.lower():
-        await message.channel.send("Did someone say midnight? :clock12:")
-        
+
+            
     if message.content.startswith('.'):
 
         command_string = message.content.split(' ')
         command = command_string[0].replace('.','')
         username = message.author.name
-        print("Command " + message.content + " called by " + username)
+        server_name = message.guild.name
+        current_time_obj = datetime.now()
+        current_time_string = current_time_obj.strftime("%b %d, %Y-%H:%M:%S.%f")
+        print(current_time_string + "--Command " + message.content + " called by " + username + " from " + server_name, flush=True)
         if (command == 'sayhi'):
-            print("Command sayhi called by " + username)
             await message.channel.send("Hello there!")
-            
+                
         elif (command == 'info' or command == 'help'):
-            response = "**This is the Author-Maton bot, the writer help bot!**\n\n*Written by Ninja Nerd*\n\n**Available comamnds:**\n\n>>> ***BASIC COMMANDS***\n\n**.info or .help** this help command\n\n**.sayhi** Say hello!\n\n***LITERATURE COMMANDS***\n\n**.savepost** -title *title* -perm *number* -post *post*: Save a post with the selected title to the database! Supports Discord formatting!\n\n**.getpost** *title*: Get a post with the selected title\n\n**.wordcount** *post* Get the number of words in the post.\n\n***DICTIONARY AND THESAURUS COMMANDS***\n\n**.define** *word or phrase* Look in the dictionary database for a word definition.\n\n**.definelike** *word or phrase*  Find words that contain the text and print their definitions.\n\n**.synonyms** *word or phrase* Get words that mean similarly to this word.\n\n**.antonyms** *word or phrase* Get words that mean the opposite of this word.\n\n**.rhymes** *word or phrase* Get words that rhyme with this one.\n\n**.sentences** *word or phrase* Use this word in a sentence.\n\n**.slang** *word or phrase* Get the first definition on UrbanDictionary for this word.\n\n.**randomslang** *word or phrase* Get a random definition from UrbanDictionary for this word.\n\n***QUIZ COMMANDS***\n\n**.quiz** Get a random definition from the database and the first one to answer with **.answer** *word or phrase* gets it right!\n\n**.answer** *word or phrase* Answer a quiz question.\n\n**.hint** Get a hint for the quiz word.\n\n**.myscore** See your current score.\n\n**.leaderboard** See the current server scoreboard.\n\n"
+            response = "**This is the Author-Maton bot, the writer help bot!**\n\n*Written by Ninja Nerd*\n\n**Available comamnds:**\n\n>>> ***BASIC COMMANDS***\n\n**.info or .help** this help command\n\n**.sayhi** Say hello!\n\n***LITERATURE COMMANDS***\n\n**.savepost** -title *title* -perm *number* -post *post*: Save a post with the selected title to the database! Supports Discord formatting! Permission = 0 for only you can retrieve it, permissions = 1 for anyone to be able to retrieve it.\n\n**.getpost** *title*: Get a post with the selected title\n\n**.wordcount** *post* Get the number of words in the post.\n\n**.writingprompt** Get a randomized scenario to write about! If it doesn't make sense, try another one!\n\n"
+            await message.channel.send(response)
+            time.sleep(3)
+            response = ">>> ***DICTIONARY AND THESAURUS COMMANDS***\n\n**.define** *word or phrase* Look in the dictionary database for a word definition.\n\n**.definelike** *word or phrase*  Find words that contain the text and print their definitions.\n\n**.synonyms** *word or phrase* Get words that mean similarly to this word.\n\n**.antonyms** *word or phrase* Get words that mean the opposite of this word.\n\n**.rhymes** *word or phrase* Get words that rhyme with this one.\n\n**.sentences** *word or phrase* Use this word in a sentence.\n\n**.slang** *word or phrase* Get the first definition on UrbanDictionary for this word.\n\n.**randomslang** *word or phrase* Get a random definition from UrbanDictionary for this word.\n\n"
+            await message.channel.send(response)
+            time.sleep(3)
+            response = ">>> ***QUIZ COMMANDS***\n\n**.quiz** Get a random definition from the database and the first one to answer with **.answer** *word or phrase* gets it right!\n\n**.answer** *word or phrase* Answer a quiz question.\n\n**.hint** Get a hint for the quiz word.\n\n**.myscore** See your current score.\n\n**.leaderboard** See the current server scoreboard.\n\n"
             await message.channel.send(response)
             time.sleep(3)
             response = ">>> ***WORD SEARCH COMMANDS***\n\n**.randomword** *minimum score* Get a random word and definition from the dictionary. Specifiy the minimum word score, or leave it blank for any score.\n\n**.wordsearch** *start letter*    *number of letters between*   *end letter* Search the dictionary for words starting and ending with the specified letters and the specified number of letters in between.\n\n**.wordpattern** *pattern*\nFind all words with the specified pattern. Represent unknown lettters as underscores (_) and known letters with their letter.\n\n**.wordscore** *word or phrase* Get the calculated word score for the specified word in the dictionary.\n\n**.wordoftheday** Get a word of the day from the dictionary with a score higher than the set limit."
             await message.channel.send(response)
             
         elif (command == 'initialize'):
-            print("initialize called by " + username)
-            if (message.author.id != 610335542780887050):
+            print("initialize called by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             await message.channel.send("Creating databases...")
@@ -74,7 +106,7 @@ async def on_message(message):
                 
                 create_sentence_database = """CREATE TABLE SampleSentences (Word varchar(300), Sentences varchar(10000));"""
                 
-                create_quiz_database = """CREATE QuizScores (Id varchar(30), Score Int)"""
+                create_quiz_database = """CREATE QuizScores (ServerId varchar(30), UserId varchar(30), Score Int);"""
                 cursor = connection.cursor()
                 result = cursor.execute(create_literature_store_table)
                 result = cursor.execute(create_dictionary_table)
@@ -92,8 +124,8 @@ async def on_message(message):
                     cursor.close()
                     connection.close()
         elif (command == 'clearwords'):
-            print("initialize called by " + username)
-            if (message.author.id != 610335542780887050):
+            print("initialize called by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             await message.channel.send("Dropping databases...")
@@ -113,10 +145,54 @@ async def on_message(message):
                     cursor.close()
                     connection.close()
         elif(command == 'writingprompt'):
-            print("writingprompt called by " + username)
-            await message.channel.send("Coming soon!")
+            print("writingprompt called by " + username, flush=True)
+            response = " "
+            get_writing_prompt = """SELECT WritingPromptText FROM WritingPromptTexts ORDER BY RAND( ) LIMIT 1;"""
+            try:
+                connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')
+                cursor = connection.cursor()
+                result = cursor.execute(get_writing_prompt)
+                records = cursor.fetchall()
+                for row in records:
+                    tokenized_prompt = str(row[0]).split(" ")
+  
+            except mysql.connector.Error as error:
+                await message.channel.send("Database error!" + str(error))
+            finally:
+                if(connection.is_connected()):
+                    cursor.close()
+                    connection.close() 
+
+            for token in tokenized_prompt:
+                print("Token: " + token, flush=True)
+                if re.search(r"-(.+?)-",token):
+                    search_term = re.sub(r"[^A-Za-z]","",token, re.S | re.MULTILINE)
+                    search_term = search_term.strip()
+                    print("Search term: " + search_term, flush=True)
+                    if (search_term == 'Characters'):
+                        search_term_2 = search_term
+                    else:
+                        search_term_2 = search_term.replace("s","")
+                    get_blank = """SELECT """ + search_term_2 + """ FROM """ + search_term + """ ORDER BY RAND( ) LIMIT 1;"""
+                    try:
+                        connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')
+                        cursor = connection.cursor()
+                        new_result = cursor.execute(get_blank)
+                        blank_records = cursor.fetchall()
+                        for blank_row in blank_records:
+                            response = response + " " + re.sub("[^A-Za-z\s/]","",str(blank_row),re.S)
+                    except mysql.connector.Error as error:
+                        await message.channel.send("Database error!" + str(error))
+                    finally:
+                        if(connection.is_connected()):
+                            cursor.close()
+                            connection.close() 
+                else:
+                        response = response + " " + re.sub(r"[^A-Za-z\s/]","",str(token), re.S)
+            await message.channel.send(">>> **WRITING PROMPT:**\n\n " + response)
+
         elif (command == "savepost"):
-            print("savepost called by " + username)
+            print("savepost called by " + username, flush=True)
             parsed_string = message.content
             title_re = re.compile("-title (.*) -perm", re.MULTILINE | re.S)
             post_re = re.compile("-post (.*)", re.MULTILINE | re.S)
@@ -146,7 +222,7 @@ async def on_message(message):
             
             author = message.author.name
             
-            print("Title: " + title + "\nAuthor: " + author + "\n Post Content: " + post)
+            print("Title: " + title + "\nAuthor: " + author + "\n Post Content: " + post, flush=True)
             
             get_last_id_query = """SELECT MAX(Id) FROM Literature;"""
             
@@ -182,19 +258,20 @@ async def on_message(message):
                     cursor.close()
                     connection.close()          
         elif (command == 'getpost'):
-            printf("getpost called by " + username)
+            print("getpost called by " + username, flush=True)
             parsed_string = message.content.replace('.getpost ','')
-            print("Title: " + parsed_string)
+            print("Title: " + parsed_string, flush=True)
             
-            get_post_query = """SELECT Title,Author,PostContent FROM Literature WHERE Title=%s;"""
-            if (entry_limit > 0):
-                get_post_query = get_post_query.replace(";"," LIMIT " + str(entry_limit) + ";")
+            get_post_query = """SELECT Title,Author,PostContent.Permissions FROM Literature WHERE Title=%s;"""
             try:
                 connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')
                 cursor = connection.cursor()
                 result = cursor.execute(get_post_query, (parsed_string,))
                 records = cursor.fetchall()
                 for row in records:
+                    if (row[3] == "0" and message.author.name != row[1]):
+                        await message.channel.send("This author has not granted permission for this post to be retrieved.")
+                        return                        
                     await message.channel.send(">>> **" + str(row[0]) + "**\n*By " + row[1] + "*\n\n" + row[2])
                     time.sleep(3)
             except mysql.connector.Error as error:
@@ -204,8 +281,8 @@ async def on_message(message):
                     cursor.close()
                     connection.close() 
         elif (command == 'resetall'):
-            print("resetall called by " + username)
-            if (message.author.id != 610335542780887050):
+            print("resetall called by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             clear_all_query = """DROP TABLE Literature; CREATE TABLE Literature (Id int NOT NULL, Title varchar(400), Author varchar(100), Permissions int, PostContent varchar(1900));"""
@@ -221,7 +298,7 @@ async def on_message(message):
                     cursor.close()
                     connection.close()
         elif (command == 'rhymes'):
-            print("rhymes called by " + username)
+            print("rhymes called by " + username, flush=True)
             parsed_string = message.content.replace('.rhymes ','')
             if not parsed_string:
                 await message.channel.send("No word specified!")
@@ -262,7 +339,7 @@ async def on_message(message):
                     cursor.close()
                     connection.close()       
         elif (command == 'define'):
-            print("define called by " +username)
+            print("define called by " +username, flush=True)
             parsed_string = message.content.replace('.define ','')
             if parsed_string == "":
                 await message.channel.send("No word specified!")
@@ -294,7 +371,7 @@ async def on_message(message):
                     cursor.close()
                     connection.close()
         elif (command == 'randomword'):
-            print("randomword called by " + username)
+            print("randomword called by " + username, flush=True)
             parsed_string = message.content.replace('.randomword ','')
             if not parsed_string:
                 parsed_string = "0"
@@ -322,13 +399,13 @@ async def on_message(message):
                             time.sleep(3)
                         acceptable_word = True
                 except mysql.connector.Error as error:
-                    print("error: " + str(error))
+                    print("error: " + str(error), flush=True)
                 finally:
                     if(connection.is_connected()):
                         cursor.close()
                         connection.close()
         elif (command == 'definelike'):
-            print("definelike called by " + username)
+            print("definelike called by " + username, flush=True)
             parsed_string = "%" + message.content.replace('.definelike ','') + "%"
             if parsed_string == "":
                 await message.channel.send("No word specified!")
@@ -370,7 +447,7 @@ async def on_message(message):
 #                    counter = counter + 1
             
         elif (command == 'synonyms'):
-            print("synonyms called by " + username)
+            print("synonyms called by " + username, flush=True)
             parsed_string = message.content.replace('.synonyms ','')
             if parsed_string == "":
                 await message.channel.send("No word specified!")
@@ -405,7 +482,7 @@ async def on_message(message):
                     cursor.close()
                     connection.close()             
         elif (command == 'antonyms'):
-            print("antonyms called by " + username)
+            print("antonyms called by " + username, flush=True)
             parsed_string = message.content.replace('.antonyms ','')
             if parsed_string == "":
                 await message.channel.send("No word specified!")
@@ -435,7 +512,7 @@ async def on_message(message):
                     cursor.close()
                     connection.close()                 
         elif (command == 'randomslang'):
-            print("randomslang called by " + username)
+            print("randomslang called by " + username, flush=True)
             word = message.content.replace(".randomslang ","")
             if not word:
                 await message.channel.send("No word specified!")
@@ -481,7 +558,7 @@ async def on_message(message):
                     cursor.close()
                     connection.close()                 
         elif (command == 'slang'):
-            print("slang called by " + username)
+            print("slang called by " + username, flush=True)
             word = message.content.replace(".slang ","")
             if not word:
                 await message.channel.send("No word specified!")
@@ -502,9 +579,9 @@ async def on_message(message):
         
  
         elif (command == 'quiz'):
-            print("quiz called by " + username)
+            print("quiz called by " + username, flush=True)
             get_dictionary_entry = """SELECT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE Definitions !=' ' ORDER BY RAND( ) LIMIT 1;"""
-            quiz_event = True
+            quiz_event[message.guild.id] = True
             try:
                 connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')
                 cursor = connection.cursor()
@@ -516,14 +593,14 @@ async def on_message(message):
                 for row in records:
                     question = row[2]
                     part_of_speech = row[1]
-                quiz_answer = row[0]
+                quiz_answer[message.guild.id] = row[0]
                 response = response + part_of_speech + " and means " + question.lower()
                 message_chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
                 for chunk in message_chunks:
                     await message.channel.send(">>> " + chunk)
                     time.sleep(3)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
@@ -532,20 +609,21 @@ async def on_message(message):
                 rhyme_page_content = " "
                 rhyme_pronunciation = " "
         elif (command == 'answer'):
-            print("answer called by " + username) 
+            print("answer called by " + username, flush=True) 
             quiz_score = 0
-            if not quiz_event:
+            if not quiz_event[message.guild.id]:
                 await message.channel.send("No quiz currently active! Type **.quiz** to start a word quiz.\n")
                 return    
             parsed_string = message.content.replace(".answer ","")
-            if (quiz_answer.lower() == parsed_string.lower()):
-                await message.channel.send("Yes, the answer was " + quiz_answer + "! Correct!")
+            if (quiz_answer[message.guild.id].lower() == parsed_string.lower()):
+                await message.channel.send("Yes, the answer was " + str(quiz_answer[message.guild.id]) + "! Correct!")
                 id_num = message.author.id
-                get_current_score = """SELECT Score FROM QuizScores WHERE Id=%s;"""
+                guild_id = message.guild.id
+                get_current_score = """SELECT Score FROM QuizScores WHERE ServerId=%s AND UserId=%s;"""
                 try:
                     connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')
                     cursor = connection.cursor()
-                    result = cursor.execute(get_current_score, (str(id_num),))
+                    result = cursor.execute(get_current_score, (str(guild_id), str(id_num)))
                     records = cursor.fetchall()
                     if cursor.rowcount == 0:
                         await message.channel.send("No score found for the specified user.")
@@ -554,7 +632,7 @@ async def on_message(message):
                         quiz_score = int(row[0])
                                   
                 except mysql.connector.Error as error:
-                    print("error: " + str(error))
+                    print("error: " + str(error), flush=True)
                 finally:
                     if(connection.is_connected()):
                         cursor.close()
@@ -564,8 +642,8 @@ async def on_message(message):
                 try:
 
                     connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')    
-                    update_score_entry = """UPDATE QuizScores Set Score=%s WHERE Id=%s;"""   
-                    score_entry = (str(quiz_score), str(id_num))
+                    update_score_entry = """UPDATE QuizScores Set Score=%s WHERE ServerId=%s AND UserId=%s;"""   
+                    score_entry = (str(quiz_score), str(guild_id), str(id_num))
                     cursor = connection.cursor()
                     result = cursor.execute(update_score_entry, score_entry)
                     connection.commit()
@@ -577,16 +655,17 @@ async def on_message(message):
                         connection.close()
             
             else:
-                await message.channel.send("Sorry, the answer was " + quiz_answer + ".")
-            quiz_event = False
-            quiz_answer = " "
+                await message.channel.send("Sorry, the answer was " + str(quiz_answer[message.guild.id]) + ".")
+            quiz_event[message.guild.id] = False
+            quiz_answer[message.guild.id] = " "
         elif (command == 'myscore'):
             my_id = message.author.id
-            get_my_score = """SELECT Score FROM QuizScores WHERE Id=%s;"""
+            guild_id = message.guild.id
+            get_my_score = """SELECT Score FROM QuizScores WHERE ServerId=%ds AND Id=%s;"""
             try:
                 connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')
                 cursor = connection.cursor()
-                result = cursor.execute(get_my_score, (str(my_id),))
+                result = cursor.execute(get_my_score, (str(guild_id), str(my_id)))
                 records = cursor.fetchall()
                 if cursor.rowcount == 0:
                     await message.channel.send("No score found for the specified user.")
@@ -600,20 +679,21 @@ async def on_message(message):
                     await message.channel.send(">>> " + chunk)
                     time.sleep(3)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
                     connection.close()
         elif (command == 'leaderboard'):
-            get_leaderboard = """SELECT Id,Score FROM QuizScores ORDER BY Score DESC;"""
+            get_leaderboard = """SELECT UserId,Score FROM QuizScores WHERE ServerId=%s ORDER BY Score DESC;"""
+            guild_id = message.guild.id
             try:
                 connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')
                 cursor = connection.cursor()
-                result = cursor.execute(get_leaderboard)
+                result = cursor.execute(get_leaderboard, (str(guild_id),))
                 records = cursor.fetchall()
                 if cursor.rowcount == 0:
-                    await message.channel.send("No score found for the specified user.")
+                    await message.channel.send("No score found for the specified server.")
                     return
                 response = "**Quiz Leaderboard:**\n\n"
                 for row in records:
@@ -624,27 +704,27 @@ async def on_message(message):
                     await message.channel.send(">>> " + chunk)
                     time.sleep(3)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
                     connection.close()
         elif (command == 'hint'):
-            print("hint called by " + username)
-            if not quiz_event:
+            print("hint called by " + username, flush=True)
+            if not quiz_event[message.guild.id]:
                 await message.channel.send("No quiz currently active! Type **.quiz** to start a word quiz.\n")
-            hint = quiz_answer[0]
-            letters = len(quiz_answer)
+            hint = quiz_answer[message.guild.id][0]
+            letters = len(quiz_answer[message.guild.id])
             await message.channel.send("The first letter of the word is " + hint + " and it has " + str(letters) + " letters.")
         elif (command == 'wordcount'):
-            print("wordcount called by " + username)
+            print("wordcount called by " + username, flush=True)
             parsed_string = message.content.replace(".wordcount ","")
             words_in_post = parsed_string.split()
             word_count = len(words_in_post)
             await message.channel.send("The word count is " + str(word_count) + ".")
         elif (command == 'mysql'):
-            print("mysql called by " + username)
-            if (message.author.id != 610335542780887050):
+            print("mysql called by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             mysql_command = message.content.replace(".mysql ","")
@@ -663,21 +743,21 @@ async def on_message(message):
                     await message.channel.send(">>> " + chunk)
                     time.sleep(3)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
                     connection.close()
         elif (command == 'restartbot'):
-            print("restartbot called by " + username)
-            if (message.author.id != 610335542780887050):
+            print("restartbot called by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             await message.channel.send("Restarting bot...")
             output = subprocess.run(["/home/REDACTED/restartbot.sh"], universal_newlines=True, stdout=subprocess.PIPE)
             await message.channel.send("Output from restart: " + str(output.stdout))
         elif (command == 'wordsearch'):
-            print("wordsearch called by " + username)
+            print("wordsearch called by " + username, flush=True)
             start_letter = command_string[1]
             number_of_letters = command_string[2]
             end_letter = command_string[3]
@@ -715,13 +795,13 @@ async def on_message(message):
                     await message.channel.send(">>> " + chunk)
                     time.sleep(3)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
                     connection.close()
         elif (command == 'wordpattern'):
-            print("wordpattern called by " + username)
+            print("wordpattern called by " + username, flush=True)
             parsed_string = message.content.replace(".wordpattern ","")
             parsed_string = parsed_string.replace(" ","")
             
@@ -749,7 +829,7 @@ async def on_message(message):
                     await message.channel.send(">>> " + chunk)
                     time.sleep(3)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
@@ -774,13 +854,13 @@ async def on_message(message):
                     await message.channel.send(">>> " + chunk)
                     time.sleep(3)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
                     connection.close()
         elif (command == 'setminscore'):
-            if (message.author.id != 610335542780887050):
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             word_of_the_day_score = int(message.content.replace('.setminscore ',""))
@@ -808,20 +888,21 @@ async def on_message(message):
                             time.sleep(3)
                     
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
                     connection.close()
         elif (command == 'resetscores'):
-            set_score_to_zero = """UPDATE QuizScores Set Score=0;"""
+            set_score_to_zero = """UPDATE QuizScores Set Score=0 WHERE ServerId=%s;"""
+            server_id = message.guild.id
             try:
 
                 connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')    
                 definition = re.sub(remove_first_separator_re,"",definition)
                 dictionary_entry = (id, word, part_of_speech, definition, rhyme_pro)
                 cursor = connection.cursor()
-                result = cursor.execute(set_score_to_zero)
+                result = cursor.execute(set_score_to_zero, (server_id,))
                 connection.commit()
             except mysql.connector.Error as error:
                 await message.channel.send("Database error! " + str(error))   
@@ -831,7 +912,7 @@ async def on_message(message):
                     connection.close()
             await message.channel.send("Leaderboard reset to zero for all members.")
         elif (command == 'initializeleaderboard'):
-            if (message.author.id != 610335542780887050):
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
                 
@@ -840,8 +921,8 @@ async def on_message(message):
                     try:
 
                         connection = mysql.connector.connect(host='localhost', database='AuthorMaton', user='REDACTED', password='REDACTED')    
-                        create_score_entry = """INSERT INTO QuizScores (Id, Score) VALUES(%s, %s);"""   
-                        score_entry = (str(member.id), str(0))
+                        create_score_entry = """INSERT INTO QuizScores (ServerId, UserId, Score) VALUES(%s, %s, %s);"""   
+                        score_entry = (str(guild.id), str(member.id), str(0))
                         cursor = connection.cursor()
                         result = cursor.execute(create_score_entry, score_entry)
                         connection.commit()
@@ -853,8 +934,8 @@ async def on_message(message):
                             connection.close()
             await message.channel.send("Leaderboard initialized.") 
         elif (command == 'calculatevalues'):
-            print("calculatevalues by " + username)
-            if (message.author.id != 610335542780887050):
+            print("calculatevalues by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             word_scores = {}   
@@ -868,7 +949,7 @@ async def on_message(message):
                 letter_values = { "E" : 1, "A" : 1, "I" : 1, "O" : 1, "N" : 1, "R" : 1, "T" : 1, "L" : 1, "S" : 1, "U" : 1, "D" : 2, "G" : 2, "B" : 3, "C" : 2, "M" : 3, "P" : 2, "F" : 4, "H" : 4, "V" : 4, "W" : 4, "Y" : 4, "K" : 5, "J" : 8, "X" : 8, "Q" : 10, "Z" : 10, "-": 0, " " : 0}
                  
                 for row in records:
-                    print("Processing " + str(row[0]) + "...")
+                    print("Processing " + str(row[0]) + "...", flush=True)
                     acceptable_word = True
                     parsed_definition = row[1]
                     possible_word = row[0].strip()
@@ -880,17 +961,17 @@ async def on_message(message):
                         
                         if re.search("singular|plural|past|future|relating",token, re.IGNORECASE) or re.search(token,possible_word, re.IGNORECASE):
                             acceptable_word = False
-                            print("Skipping " + possible_word + "...")
+                            print("Skipping " + possible_word + "...", flush=True)
                     if acceptable_word:
                         length_score = len(str(row[0]))
                         letter_score = 0
                         for x in str(row[0]).upper():
                             letter_score = letter_score + letter_values[x]
                         word_scores[str(row[0])] = letter_score + length_score
-                        print("Word score: " + str(word_scores[str(row[0])]))
+                        print("Word score: " + str(word_scores[str(row[0])]), flush=True)
 
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
@@ -901,7 +982,7 @@ async def on_message(message):
                 cursor = connection.cursor()
                 result = cursor.execute(create_word_value_table)
             except mysql.connector.Error as error:
-                print("error: " + str(error))
+                print("error: " + str(error), flush=True)
             finally:
                 if(connection.is_connected()):
                     cursor.close()
@@ -915,22 +996,175 @@ async def on_message(message):
                     result = cursor.execute(create_word_value_entry, word_value_entry)
                     connection.commit()
                 except mysql.connector.Error as error:
-                    print("Error: " + str(error))
+                    print("Error: " + str(error), flush=True)
                     #await message.channel.send("Database error! " + str(error))   
                 finally:
                     if(connection.is_connected()):
                         cursor.close()
                         connection.close()
         elif (command == 'setentrylimit'):
-            print("calculatevalues by " + username)
-            if (message.author.id != 610335542780887050):
+            print("calculatevalues by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             entry_limit = int(command_string[1])
             await message.channel.send("Entry limit set to " + str(entry_limit) + ".")
+        elif (command == 'loadwritingprompts'):
+            print("loadwritingprompts called by " + username, flush=True)
+            if (message.author.id != REDACTED):
+                await message.channel.send("Admin command only!")
+                return        
+            await message.channel.send("Starting dictionary database load...\nBot will be unavailable until complete.")
+            writing_file = "/home/REDACTED/writingprompttexts.txt"
+            characters_file = "/home/REDACTED/characters.txt"
+            places_file = "/home/REDACTED/places.txt"
+            timeperiods_file = "/home/REDACTED/timeperiods.txt"
+            objects_file = "/home/REDACTED/objects.txt"
+            adjectives_file = "/home/REDACTED/adjectives.txt"
+            actions_file = "/home/REDACTED/actions.txt"
+            genders_file = "/home/REDACTED/genders.txt"
+            occupations_file = "/home/REDACTED/occupations.txt"
+            id = 1
+            f = open(occupations_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO Occupations (Id, Occupation) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close()
+            f = open(writing_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO WritingPromptTexts (Id, WritingPromptText) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close()
+            f = open(characters_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO Characters (Id, Characters) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close()
+            f = open(places_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO Places (Id, Place) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close() 
+            f = open(timeperiods_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO TimePeriods (Id, TimePeriod) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close()
+            f = open(objects_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO Objects (Id, Object) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close()                         
+            f = open(adjectives_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO Adjectives (Id, Adjective) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close() 
+            f = open(actions_file, 'r')
+            for line in f:
+                line = line.strip()
+                id = id + 1
+                try:
+
+                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
+                    create_entry = """INSERT INTO Actions (Id, Action) VALUES(%s, %s);"""
+                    cursor = connection.cursor()
+                    result = cursor.execute(create_entry, (id, line))
+                    connection.commit()
+                except mysql.connector.Error as error:
+                    await message.channel.send("Database error! " + str(error))   
+                finally:
+                    if(connection.is_connected()):
+                        cursor.close()
+                        connection.close()
+            await message.channel.send("Completed!")
         elif (command == 'loadwords'):
-            print("loadwords called by " + username)
-            if (message.author.id != 610335542780887050):
+            print("loadwords called by " + username, flush=True)
+            if (message.author.id != REDACTED):
                 await message.channel.send("Admin command only!")
                 return
             await message.channel.send("Starting dictionary database load...\nBot will be unavailable until complete.")
@@ -1008,7 +1242,7 @@ async def on_message(message):
                     rhyme_base = n.group('pro')
                     rhyme_pronunciation = rhmye_pronunciation.join(rhyme_base)
                     rhyme_pronunciation = re.sub(wiki_re,"",rhyme_pronunciation)
-                    print("Processing rhyme " + rhyme_pronunciation + "...")
+                    print("Processing rhyme " + rhyme_pronunciation + "...", flush=True)
                     rhyme_page_flag = True
                     skip_page = True
                     rhyme_page_content = " "
@@ -1022,7 +1256,7 @@ async def on_message(message):
                     else:
                         skip_page = False
                         skip_rest_of_page = False
-                    print("Processing " + word + "...")
+                    print("Processing " + word + "...", flush=True)
                     definition = " "
                     synonyms = " "
                     antonyms = " "
@@ -1044,7 +1278,7 @@ async def on_message(message):
 
                     
                 if english_re.search(line):
-                    print("FOund English tag!")
+                    print("FOund English tag!", flush=True)
                     text_flag = False
                     text_line_counter = 0
 
@@ -1235,7 +1469,7 @@ async def on_message(message):
                             connection.commit()
                             word_count = word_count + 1
                         except mysql.connector.Error as error:
-                            print("Error: " + str(error))
+                            print("Error: " + str(error), flush=True)
                             #await message.channel.send("Database error! " + str(error))   
                         finally:
                             if(connection.is_connected()):
@@ -1248,7 +1482,7 @@ async def on_message(message):
                     if rhymes:
                         for rhyme in rhymes:
                             temp_rhyme = str(rhyme)
-                            print("Found rhyme: " + rhyme)
+                            print("Found rhyme: " + rhyme, flush=True)
                             temp_rhyme = re.sub(wiki_re," ",temp_rhyme)
                             temp_rhyme = re.sub(extra_clear_re,"",temp_rhyme)
                             temp_rhyme = re.sub("rhyme list begin","",temp_rhyme)
@@ -1268,7 +1502,7 @@ async def on_message(message):
                             result = cursor.execute(create_rhyme_entry, rhyme_table_entry)
                             connection.commit()
                         except mysql.connector.Error as error:
-                            print("error: " + str(error))
+                            print("error: " + str(error), flush=True)
                         finally:
                             if(connection.is_connected()):
                                 cursor.close()
@@ -1279,8 +1513,8 @@ async def on_message(message):
                             
             await message.channel.send("Word load complete! Word count: " + str(word_count))  
         else:
-            print("No command recognized by " + username)
+            print("No command recognized by " + username, flush=True)
             await message.channel.send("Invalid command.\n\nType **.info** for a list of available commands.")
     else:
         pass
-client.run('key')    
+client.run('REDACTED')    
