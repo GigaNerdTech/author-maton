@@ -13,6 +13,12 @@ from datetime import datetime
 client = discord.Client()
 quiz_event = { }
 quiz_answer = { }
+poetry_tag_event = { }
+poetry_tag_users = { }
+poetry_tag_mode = { }
+poetry_tag_current_user = {}
+poetry_tag_tandem_poem = {}
+poetry_tag_topic = { }
 quiz_scores = {}
 word_of_the_day_score = 20
 entry_limit = 5
@@ -677,7 +683,7 @@ async def load_words(message):
 
     
 def admin_check(userid):
-    if (userid != 0):
+    if (userid != 610335542780887050):
         log_message(str(userid) + " tried to call an admin message!")
         return False
     else:
@@ -687,7 +693,10 @@ async def show_info(message):
     response = "**This is the Author-Maton bot, the writer help bot!**\n\n*Written by Ninja Nerd*\n\n**Available comamnds:**\n\n>>> ***BASIC COMMANDS***\n\n**.info or .help** this help command\n\n**.sayhi** Say hello!\n\n***LITERATURE COMMANDS***\n\n**.savepost** -title *title* -perm *number* -post *post*: Save a post with the selected title to the database! Supports Discord formatting! Permission = 0 for only you can retrieve it, permissions = 1 for anyone to be able to retrieve it.\n\n**.getpost** *title*: Get a post with the selected title\n\n**.wordcount** *post* Get the number of words in the post.\n\n**.writingprompt** Get a randomized scenario to write about! If it doesn't make sense, try another one!\n\n"
     await message.channel.send(response)
     time.sleep(3)
-    response = ">>> ***DICTIONARY AND THESAURUS COMMANDS***\n\n**.define** *word or phrase* Look in the dictionary database for a word definition.\n\n**.definelike** *word or phrase*  Find words that contain the text and print their definitions.\n\n**.synonyms** *word or phrase* Get words that mean similarly to this word.\n\n**.antonyms** *word or phrase* Get words that mean the opposite of this word.\n\n**.rhymes** *word or phrase* Get words that rhyme with this one.\n\n**.sentences** *word or phrase* Use this word in a sentence.\n\n**.derivedterms** *word or phrase* See other words and phrases based on this one.\n\n**.slang** *word or phrase* Get the first definition on UrbanDictionary for this word.\n\n.**randomslang** *word or phrase* Get a random definition from UrbanDictionary for this word.\n\n"
+    response = ">>> ***DICTIONARY AND THESAURUS COMMANDS***\n\n**.define** *word or phrase* Look in the dictionary database for a word definition.\n\n**.definelike** *word or phrase*  Find words that contain the text and print their definitions.\n\n**.synonyms** *word or phrase* Get words that mean similarly to this word.\n\n**.antonyms** *word or phrase* Get words that mean the opposite of this word.\n\n**.rhymes** *word or phrase* Get words that rhyme with this one.\n\n**.sentences** *word or phrase* Use this word in a sentence.\n\n**.derivedterms** *word or phrase* See other words and phrases based on this one.\n\n**.slang** *word or phrase* Get the first definition on UrbanDictionary for this word.\n\n.**randomslang** *word or phrase* Get a random definition from UrbanDictionary for this word.\n\n**.translate** *language* *word* Search the dictionary for an English word in the specified language.\n\n"
+    await message.channel.send(response)
+    time.sleep(3)
+    response = ">>> ***POETRY TAG COMMANDS***\n\n**.poetrytag** *user mentions* -topic *topic* -mode *mode*\nStart a poetry tag on your server. Mention the users participating, then specify a topic and mode. Any topic is valid, but specifiying *random* will pick a topic from the database. Valid modes are *tag*, where each poet writes an entire poem, and *tandem* where each poet writes one line.\n\n**.tag** *post* Submit your poem or line for poetry tag.\n\n**.finishtag** Stop the poetry tag and print the tandem poem if in tandem mode. Poems can be saved using .savepost.\n\n"
     await message.channel.send(response)
     time.sleep(3)
     response = ">>> ***QUIZ COMMANDS***\n\n**.quiz** Get a random definition from the database and the first one to answer with **.answer** *word or phrase* gets it right!\n\n**.answer** *word or phrase* Answer a quiz question.\n\n**.hint** Get a hint for the quiz word.\n\n**.myscore** See your current score.\n\n**.leaderboard** See the current server scoreboard.\n\n"
@@ -701,9 +710,16 @@ async def show_info(message):
 async def on_ready():
     global quiz_scores
     global quiz_event
+    global poetry_tag_event
+    global poetry_tag_users
+    global poetry_tag_topic
+    global poetry_tag_mode
+
     log_message("Logged in!")
     for guild in client.guilds:
         quiz_event[guild.id] = False
+        poetry_tag_event[guild.id] = False
+        
             
 @client.event
 async def on_guild_join(guild):
@@ -734,7 +750,12 @@ async def on_message(message):
     global quiz_event
     global quiz_scores
     global entry_limit
-
+    global poetry_tag_event
+    global poetry_tag_users
+    global poetry_tag_topic
+    global poetry_tag_mode
+    global poetry_tag_current_user
+    global poetry_tag_tandem_poem
 
     if message.author == client.user:
         return
@@ -858,12 +879,12 @@ async def on_message(message):
             post = m.group()
             post = post.replace("-post ","")
             
-            author = message.author.name
+            author = message.author.id
             
-            log_message("Title: " + title + "\nAuthor: " + author + "\n Post Content: " + post)
+            log_message("Title: " + title + "\nAuthor: " + str(author) + "\n Post Content: " + post)
             
             save_post_query = """INSERT INTO Literature (Title, Author, Permissions, PostContent) VALUES (%s, %s, %s, %s);"""
-            post_to_save = (title, author, perm, post)
+            post_to_save = (title, str(author), perm, post)
             result = commit_sql(save_post_query, post_to_save)
             if result:
                 await send_message(message, "Post " + str(title) + " saved successfully.")
@@ -871,16 +892,19 @@ async def on_message(message):
                 await send_message(message, "Database error!")
         
         elif (command == 'getpost'):
+            parsed_string = parsed_string.replace("-title ","").strip()
             log_message("Title: " + parsed_string)
             
-            get_post_query = """SELECT Title,Author,PostContent.Permissions FROM Literature WHERE Title=%s;"""
-            records = select_sql(get_post_query)
+            get_post_query = """SELECT Title,Author,PostContent,Permissions FROM Literature WHERE Title=%s;"""
+            records = select_sql(get_post_query, (parsed_string,))
+            
             for row in records:
-                if (row[3] == "0" and message.author.name != row[1]):
+                author_name = get(client.get_all_members(), id=int(row[1]))
+                if (row[3] == 0 and message.author.id != row[1]):
                     await send_message(message, "This author has not granted permission for this post to be retrieved.")
                     return                        
                 else:
-                    await send_message(message, "**" + str(row[0]) + "**\n*By " + row[1] + "*\n\n" + row[2])
+                    await send_message(message, "**" + str(row[0]) + "**\n*By " + author_name.name + "*\n\n" + row[2])
 
         elif (command == 'resetliterature'):
             if not admin_check(message.author.id):
@@ -901,13 +925,15 @@ async def on_message(message):
             get_rhyme_list = """SELECT RhymesWith FROM Rhyming WHERE Word=%s AND RhymesWith!=' ';"""
             get_rhyme_entry = """SELECT RhymesWith FROM RhymeWords WHERE Pronunciation IN (SELECT Pronunciation FROM DictionaryDefs WHERE Word=%s);"""
             get_rhyme_pro_list = False
-            records = select_sql(get_rhyme_list,(parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_rhyme_list,(parsed_string,))
             response = " "
             if len(records) > 0:
                 for row in records:
                     if not (re.search(r"Category:",row) and re.search(r"English:",row)):
                         response = response + ", " + str(row[0]) + "\n\n"
-            records = select_sql(get_rhyme_entry, (parsed_string,))
+            async with message.channel.typing():            
+                records = select_sql(get_rhyme_entry, (parsed_string,))
             if len(records) == 0:
                 await send_message(message, "No rhymes found for " + parsed_string)
                 return
@@ -923,8 +949,8 @@ async def on_message(message):
             get_dictionary_entry = """SELECT DISTINCT Language,PartOfSpeech,Definitions FROM DictionaryDefs WHERE Word=%s AND Definitions !=' ';"""
             if (entry_limit > 0):
                 get_dictionary_entry = get_dictionary_entry.replace(";"," LIMIT " + str(entry_limit) + ";")
-
-            records = select_sql(get_dictionary_entry, (parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_dictionary_entry, (parsed_string,))
             if len(records) == 0:
                 await send_message(message, "No definitions found for " + parsed_string)
                 return
@@ -937,20 +963,20 @@ async def on_message(message):
             if not parsed_string:
                 parsed_string = "0"
             acceptable_word = False
-            while not acceptable_word:
-                get_word_of_the_day = """SELECT Word FROM WordValues WHERE WordValue>=%s ORDER BY RAND( ) LIMIT 1;"""
-                records = select_sql(get_word_of_the_day,(parsed_string,))
-                for row in records:
-                    word = row[0]
-                get_word_based_on_score = """SELECT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE Word=%s AND Definitions NOT LIKE '%plural%' AND Definitions NOT LIKE '%past%' AND Definitions NOT LIKE '%future%';"""
-                records = select_sql(get_word_based_on_score, (word,))
-                if len(records) > 0:
-                    response = "**Random word:**\n\n**"
+            async with message.channel.typing():
+                while not acceptable_word:
+                    records = select_sql(get_word_of_the_day,(parsed_string,))
                     for row in records:
-                        response = response + str(row[0]) + "** *" + row[1] + "*\n\n" + row[2] + "\n\n"
-                        
-                        await send_message(message, response)
-                        acceptable_word = True
+                        word = row[0]
+                    get_word_based_on_score = """SELECT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE Word=%s;"""
+                    records = select_sql(get_word_based_on_score, (word,))
+                    if len(records) > 0 and not re.search(r"past|future|form|plural|singular|^\(.*\)$",row[2]):
+                        response = "**Random word:**\n\n**"
+                        for row in records:
+                            response = response + str(row[0]) + "** *" + row[1] + "*\n\n" + row[2] + "\n\n"
+                            
+                            await send_message(message, response)
+                            acceptable_word = True
 
         elif (command == 'definelike'):
 
@@ -961,7 +987,8 @@ async def on_message(message):
             get_dictionary_entry = """SELECT DISTINCT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE Word LIKE %s AND Definitions !=' ';"""
             if (entry_limit > 0):
                 get_dictionary_entry = get_dictionary_entry.replace(";"," LIMIT " + str(entry_limit) + ";")
-                records = select_sql(get_dictionary_entry, (parsed_string,))
+                async with message.channel.typing():
+                    records = select_sql(get_dictionary_entry, (parsed_string,))
                 if len(records) == 0:
                     await send_message(message, "No words found that matched " + parsed_string.replace('%',''))
                     return
@@ -977,8 +1004,8 @@ async def on_message(message):
                 return
 
             get_synonym_entry = """SELECT Synonyms FROM Thesaurus WHERE Word=%s AND Synonyms != ' ';"""
-
-            records = select_sql(get_synonym_entry, (parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_synonym_entry, (parsed_string,))
             if len(records) == 0:
                 await send_message(message, "No synonyms found for " + parsed_string)
                 return
@@ -1004,7 +1031,8 @@ async def on_message(message):
                 await send_message("No word specified!")
                 return
             get_antonym_entry = """SELECT Antonyms FROM Thesaurus WHERE Word=%s AND Antonyms != ' ';"""
-            records = select_sql(get_antonym_entry, (parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_antonym_entry, (parsed_string,))
             if len(records) == 0:
                 await send_message(message, "No antonyms found for " + parsed_string)
                 return
@@ -1016,7 +1044,8 @@ async def on_message(message):
                 if m:
                     word = m.group(1)
                 log_message("See also: " + word)
-                see_also_records = select_sql("""SELECT Antonyms FROM SeeAlsoThesaurus WHERE Word=%s;""", (word,))
+                async with message.channel.typing():
+                    see_also_records = select_sql("""SELECT Antonyms FROM SeeAlsoThesaurus WHERE Word=%s;""", (word,))
                 more_syns = " "
                 for also_record in see_also_records:
                     log_message(str(also_record))
@@ -1030,7 +1059,8 @@ async def on_message(message):
                 await send_message(message, "No word specified!")
                 return
             get_derived_entry = """SELECT DerivedTerms FROM DerivedWords WHERE Word=%s AND DerivedTerms != ' ';"""
-            records = select_sql(get_derived_entry,(parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_derived_entry,(parsed_string,))
             if len(records) == 0:
                 await send_message(message,"No derived terms found for " + parsed_string)
                 return
@@ -1065,8 +1095,8 @@ async def on_message(message):
         elif (command == 'sentences'):
 
             get_sentences = """SELECT Sentences FROM SampleSentences WHERE Word=%s AND Sentences IS NOT NULL;"""
-
-            records = select_sql(get_sentences, (parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_sentences, (parsed_string,))
 
             if len(records) == 0:
                 await send_message(message, "No sample sentences found for " + parsed_string)
@@ -1096,23 +1126,29 @@ async def on_message(message):
                 definition = definition.replace("[","")
                 definition = definition.replace(']',"")
                 
-                await send_message(message, "**" + word + "**\n\n>>> " + definition)
+                await send_message(message, "**" + word + "**\n\n" + definition)
             else:
                 await send_message(message, "This is not a NSFW channel. Please issue slang commands in a NSFW channel.")            
  
         elif (command == 'quiz'):
-            get_dictionary_entry = """SELECT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE Definitions !=' ' ORDER BY RAND( ) LIMIT 1;"""
-            quiz_event[message.guild.id] = True
-            records = select_sql(get_dictionary_entry)
-            part_of_speech = " "
-            question = " "
-            response = "What word is a "
-            for row in records:
-                question = row[2]
-                part_of_speech = row[1]
-            quiz_answer[message.guild.id] = row[0]
-            response = response + part_of_speech + " and means " + question.lower().replace(quiz_answer[message.guild.id],"----")
-            await send_message(message, response)
+            async with message.channel.typing():
+                acceptable_word = False
+                while not acceptable_word:
+                    get_dictionary_entry = """SELECT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE Definitions !=' ' AND Language='English' ORDER BY RAND( ) LIMIT 1;"""
+                    quiz_event[message.guild.id] = True
+                    records = select_sql(get_dictionary_entry)
+                    for row in records:
+                        if not re.search(r"plural|singular|past|future|^\(.*\)$|(?:\(.*\);)+", row[2]):
+                            acceptable_word = True
+                part_of_speech = " "
+                question = " "
+                response = "What word is a "
+                for row in records:
+                    question = row[2]
+                    part_of_speech = row[1]
+                quiz_answer[message.guild.id] = row[0]
+                response = response + part_of_speech + " and means " + question.lower().replace(quiz_answer[message.guild.id],"----")
+                await send_message(message, response)
 
         elif (command == 'answer'):
 
@@ -1150,8 +1186,9 @@ async def on_message(message):
         elif (command == 'myscore'):
             my_id = message.author.id
             guild_id = message.guild.id
-            get_my_score = """SELECT Score FROM QuizScores WHERE ServerId=%ds AND Id=%s;"""
-            records = select_sql(get_my_score, (str(guild_id), str(my_id)))
+            get_my_score = """SELECT Score FROM QuizScores WHERE ServerId=%s AND UserId=%s;"""
+            async with message.channel.typing():
+                records = select_sql(get_my_score, (str(guild_id), str(my_id)))
             if len(records) == 0:
                 await send_message(message, "No score found for the specified user.")
                 return
@@ -1163,7 +1200,8 @@ async def on_message(message):
         elif (command == 'leaderboard'):
             get_leaderboard = """SELECT UserId,Score FROM QuizScores WHERE ServerId=%s ORDER BY Score DESC;"""
             guild_id = message.guild.id
-            records = select_sql(get_leaderboard, (str(guild_id),))
+            async with message.channel.typing():
+                records = select_sql(get_leaderboard, (str(guild_id),))
 
             if len(records) == 0:
                 await send_message(message, "No score found for the specified server.")
@@ -1213,7 +1251,7 @@ async def on_message(message):
             if not end_letter:
                 await send_message(message, "No end letters specified!")
                 return
-            word_search_query = """SELECT Word FROM DictionaryDefs WHERE Word LIKE %s;"""
+            word_search_query = """SELECT Word FROM DictionaryDefs WHERE Word LIKE %s AND Langage='English';"""
             if (entry_limit > 0):
                 word_search_query = word_search_query.replace(";"," LIMIT " + str(entry_limit) + ";")
             word_pattern = start_letter
@@ -1221,7 +1259,8 @@ async def on_message(message):
                 word_pattern = word_pattern + "_"
             word_pattern = word_pattern + end_letter
 
-            records = select_sql(word_search_query, (word_pattern,))
+            async with message.channel.typing():
+                records = select_sql(word_search_query, (word_pattern,))
 
             if len(records) == 0:
                 await send_message(message, "No words found for the specified patern.")
@@ -1240,10 +1279,11 @@ async def on_message(message):
                 await send_message(message, "No pattern specified!")
                 return
             
-            word_pattern_query = """SELECT Word FROM DictionaryDefs WHERE Word LIKE %s;"""
+            word_pattern_query = """SELECT Word FROM DictionaryDefs WHERE Word LIKE %s and Language='English';"""
             if (entry_limit > 0):
                 word_pattern_query = word_pattern_query.replace(";"," LIMIT " + str(entry_limit) + ";")
-                records = select_sql(word_pattern_query, (parsed_string,))
+                async with message.channel.typing():
+                    records = select_sql(word_pattern_query, (parsed_string,))
 
             if len(records) == 0:
                 await send_message(message, "No words found for the specified patern.")
@@ -1260,8 +1300,8 @@ async def on_message(message):
             if not parsed_string:
                 await send_message(message, "No word specified!")
                 return
-
-            records = select_sql(get_etymology, (parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_etymology, (parsed_string,))
 
             if len(records) == 0:
                 await send_message(message, "No etymology found for the specified word.")
@@ -1275,7 +1315,8 @@ async def on_message(message):
         elif (command == 'wordscore'):
 
             get_word_score = """SELECT WordValue FROM WordValues WHERE Word=%s LIMIT 1;"""
-            records = select_sql(get_word_score, (parsed_string,))
+            async with message.channel.typing():
+                records = select_sql(get_word_score, (parsed_string,))
             if len(records) == 0:
                 await send_message(message, "No score found for the specified word.")
                 return
@@ -1292,22 +1333,23 @@ async def on_message(message):
             await send_message(message, "Word of the day score minimum set to " + str(word_of_the_day_score))
             
         elif (command == 'wordoftheday'):
-            get_word_of_the_day = """SELECT Word FROM WordValues WHERE WordValue>=%s ORDER BY RAND( ) LIMIT 1;"""
+            async with message.channel.typing():
+                get_word_of_the_day = """SELECT Word FROM WordValues WHERE WordValue>=%s ORDER BY RAND( ) LIMIT 1;"""
 
-            records = select_sql(get_word_of_the_day, (word_of_the_day_score,))
-            for row in records:
-                word = row[0]
-            get_word_based_on_score = """SELECT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE (Word=%s AND Definitions !=' ') LIMIT 1;"""
-            records = select_sql(get_word_based_on_score, (word,))
-
-            if len(records) > 0:
-                response = "**WORD OF THE DAY**\n\nThe word of the day is **"
+                records = select_sql(get_word_of_the_day, (word_of_the_day_score,))
                 for row in records:
-                    response = response + str(row[0]) + "** *" + row[1] + "*\n\n" + row[2] + "\n\n"
-                    
-                await send_message(message, response)
-            else:
-                await send_message(message, "Database error.")
+                    word = row[0]
+                get_word_based_on_score = """SELECT Word,PartOfSpeech,Definitions FROM DictionaryDefs WHERE (Word=%s AND Definitions !=' ') LIMIT 1;"""
+                records = select_sql(get_word_based_on_score, (word,))
+
+                if len(records) > 0:
+                    response = "**WORD OF THE DAY**\n\nThe word of the day is **"
+                    for row in records:
+                        response = response + str(row[0]) + "** *" + row[1] + "*\n\n" + row[2] + "\n\n"
+                        
+                    await send_message(message, response)
+                else:
+                    await send_message(message, "Database error.")
 
         elif (command == 'resetscores'):
             set_score_to_zero = """UPDATE QuizScores Set Score=0 WHERE ServerId=%s;"""
@@ -1322,7 +1364,7 @@ async def on_message(message):
             if not admin_check(message.author.id):
                 await send_message(message, "Admin command only!")
                 return
-            result = execute_sql("""CREATE TABLE QuizScores (ServerId VarChar(40), UserId VarChar(30), Score Int);""")
+            result = execute_sql("""DROP TABLE IF EXISTS QuizScores; CREATE TABLE QuizScores (ServerId VarChar(40), UserId VarChar(30), Score Int);""")
             if not result:
                 await send_message(message,"Could not create Quiz Scores!")
             for guild in client.guilds:
@@ -1333,7 +1375,7 @@ async def on_message(message):
                     if not result:
                         await send_message(message, "Database error!")   
 
-                await send_message(message, "Leaderboard initialized.") 
+            await send_message(message, "Leaderboard initialized.") 
                         
         elif (command == 'calculatevalues'):
 
@@ -1389,158 +1431,87 @@ async def on_message(message):
             entry_limit = int(command_string[1])
             await send_message(message, "Entry limit set to " + str(entry_limit) + ".")
             
-        elif (command == 'loadwritingprompts'):
-            if not admin_check(message.author.id):
-                await send_message(message, "Admin command only!")
-                return        
-            await send_message(message, "Starting dictionary database load...\nBot will be unavailable until complete.")
-            writing_file = "/home/REDACTED/writingprompttexts.txt"
-            characters_file = "/home/REDACTED/characters.txt"
-            places_file = "/home/REDACTED/places.txt"
-            timeperiods_file = "/home/REDACTED/timeperiods.txt"
-            objects_file = "/home/REDACTED/objects.txt"
-            adjectives_file = "/home/REDACTED/adjectives.txt"
-            actions_file = "/home/REDACTED/actions.txt"
-            genders_file = "/home/REDACTED/genders.txt"
-            occupations_file = "/home/REDACTED/occupations.txt"
-            id = 1
-            f = open(occupations_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
+        elif (command == 'poetrytag'):
+            if poetry_tag_event[message.guild.id]:
+                await send_message(message, "Poetry event already started!")
+                return
+                
+            parsed_string = message.content.replace(".poetrytag ","")
+            
+            users_re = re.compile(r"-users (.+?) -", re.MULTILINE | re.S)
+            topic_re = re.compile(r"-topic (.+?) -", re.MULTILINE | re.S)
+            mode_re = re.compile(r"-mode (.+)", re.MULTILINE | re.S)
+            user_id = message.author.id
 
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO Occupations (Id, Occupation) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close()
-            f = open(writing_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
-
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO WritingPromptTexts (Id, WritingPromptText) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close()
-            f = open(characters_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
-
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO Characters (Id, Characters) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close()
-            f = open(places_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
-
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO Places (Id, Place) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close() 
-            f = open(timeperiods_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
-
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO TimePeriods (Id, TimePeriod) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close()
-            f = open(objects_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
-
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO Objects (Id, Object) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close()                         
-            f = open(adjectives_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
-
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO Adjectives (Id, Adjective) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close() 
-            f = open(actions_file, 'r')
-            for line in f:
-                line = line.strip()
-                id = id + 1
-                try:
-
-                    connection = mysql.connector.connect(host='localhost', database='WritingPrompts', user='REDACTED', password='REDACTED')    
-                    create_entry = """INSERT INTO Actions (Id, Action) VALUES(%s, %s);"""
-                    cursor = connection.cursor()
-                    result = cursor.execute(create_entry, (id, line))
-                    connection.commit()
-                except mysql.connector.Error as error:
-                    await message.channel.send("Database error! " + str(error))   
-                finally:
-                    if(connection.is_connected()):
-                        cursor.close()
-                        connection.close()
-            await send_message(message, "Completed!")
+            users = message.mentions
+            if not users:
+                await send_message(message, "No users specified!")
+                return
+                
+            m = topic_re.search(parsed_string)
+            if not m:
+                await send_message(message, "No topic specified!")
+                return
+            topic = m.group().replace("-topic ","").replace(" -","").strip()
+            
+            m = mode_re.search(parsed_string)
+            if not m:
+                await send_message(message, "No mode specified!")
+                return
+            mode = m.group().replace("-mode ","").strip()
+            if not re.search(r"tag|tandem",mode):
+                await send_message(message, "Valid modes are tag and tandem!")
+                return
+            
+            if re.search("random",topic):
+                topic = random.choice(["Night-time", "A particular color", "Being underwater", "A person whose life you're curious about", "Your mother's perfume", "Falling asleep or waking up", "Growing older", "The feeling of getting lost in a book", "How to know if you're in love", "A bad dream", "A ghost", "Your city; town; or neighborhood", "An important life choice you've made", "Spring; summer; fall; or winter", "Something most people see as ugly but which you see as beautiful", "Jealousy", "Becoming a parent", "An event that changed you", "A place you visited -- how you imagined it beforehand; and what it was actually like", "The ocean", "Forgetting", "The speed of light", "A voodoo doll", "Reflections on a window", "A newspaper headline", "Your greatest fear", "Your grandmother's hands", "A particular toy you had as a child", "Being invisible", "A time you felt homesick", "Having an affair; or discovering your partner is having one", "Birthdays", "A favorite food and a specific memory of eating it", "An imaginary city", "Driving with the radio on", "Life in an aquarium", "Dancing", "Walking with your eyes closed", "What a computer might daydream about", "Time travel", "Brothers or sisters", "Your job; or a job you've had", "Weddings", "Leaving home", "Camping", "A zoo", "A historical event from the perspective of someone who saw it firsthand (You will have to do some research for this).", "Holding your breath", "Intimacy and privacy", "A time you were tempted to do something you feel is wrong", "Physical attraction to someone", "A superstition you have", "Someone you admire", "Write about the taste of: an egg; an orange; medicine; cinnamon", "Write about the smell of: burning food; melting snow; the ocean; your grandparents' home; the inside of a bus; pavement after the rain", "Write about the sound of: a radio changing channels; a dog howling; a football or baseball game; your parents talking in another room", "Write about the sight of: lit windows in a house when you're standing outside at night; someone you love when he or she doesn't know you're watching; a dying plant; shadows on snow", "Write about the feeling of: grass under bare feet; a really bad kiss; the headrush when you stand up too fast; sore muscles; falling asleep in the back seat of a moving car.", "a dessert; a memory; and someone in your family", "dancing; a pitch-black room; and the smell of lilacs", "a balloon; smoke; and a keyhole", "a secret box; an ice cube tray; and a velvet ribbon", "a betrayal; soap; and a plane ticket", "Rain; snow; or a storm", "An animal you think is beautiful or strange",  "Your parents or children",  "How a kiss feels",  "The house where you were born",  "A smell that brings back memories",  "Being a teenager; becoming an adult; middle age; old age",  "Feeling lonely",  "The moon",  "Getting lost",  "Marriage or divorce",  "An imaginary friend",  "Life in the future",  "The hottest; coldest; or most exhausted you have ever felt", "Having a fever",  "A new version of a fairy-tale",  "The shapes you see in clouds",  "Format: A letter",  "Format: A recipe",  "Format: A horoscope",  "Format: A fragment from an unusual dictionary",  "Format: A prayer",  "Format: A shopping list",  "Format: A magic spell.",  "Point of view: One of your parents",  "Point of view: Your child (real or imagined)",  "Point of view: A historical figure",  "Point of view: A very old person",  "Point of view: An athlete who has just lost the big game",  "Point of view: The most popular/unpopular kid from your school",  "Point of view: An inanimate object in your home.",  "Three wishes",  "Traveling to an unknown place",  "Getting a haircut",  "A scientific fact (real or invented)",  "An insect that got into your home",  "The sound of a specific language",  "Death",  "The number 3",  "The ocean",  "Missing someone",  "Something that makes you angry",  "The feeling of writing; why you want to be a writer",  "The ups and downs of love",  "The view out your window",  "City lights at night",  "A particular work of art",  "Having a superpower",  "Being in an airplane",  "Playing a sport",  "A shadow",  "A person transformed into an animal",  "Daydream",  "Cry",  "Kiss well",  "Find happiness",  "Peel a peach",  "Silky; gigantic; and puzzle.",  "Leaf; accelerating; and sticky.",  "Skin; drastic; and dusty.",  "Interrupt; nutmeg; and crystalline.",  "Exacting; oxygen; and delicate.",  "Reptilian; arched; and honey."])
+            poetry_tag_event[message.guild.id] = True
+            poetry_tag_users[message.guild.id] = users
+            poetry_tag_topic[message.guild.id] = topic
+            poetry_tag_mode[message.guild.id] = mode
+            await send_message(message, "Poetry tag event started with topic of **" + str(topic) + "** in mode **" + str(mode) + "**")
+            if re.search('tag', mode):
+                await send_message(message, "<@" + str(users[0].id) + ">, you are first! Type .tag and your poem!")
+            if re.search('tandem', mode):
+                await send_message(message, "<@" + str(users[0].id) + ">, you are first! Type .tag and your line!")
+                poetry_tag_tandem_poem[message.guild.id] = " "
+            poetry_tag_current_user[message.guild.id] = 0
+        elif (command == 'tag'):
+            if not poetry_tag_event[message.guild.id]:
+                await send_message(message, "No poetry tag currently running!")
+                return
+            if message.author.id != poetry_tag_users[message.guild.id][poetry_tag_current_user[message.guild.id]].id:
+                await send_message(message, "It's not your turn!")
+                return
+            if (re.search('tag',poetry_tag_mode[message.guild.id])):
+                await send_message(message, "Thank you for your poem!")
+                poetry_tag_current_user[message.guild.id] = poetry_tag_current_user[message.guild.id] + 1
+                if poetry_tag_current_user[message.guild.id] >= len(poetry_tag_users[message.guild.id]):
+                    poetry_tag_current_user[message.guild.id] = 0
+                next_user = poetry_tag_users[message.guild.id][poetry_tag_current_user].id
+                await send_message(message, "You're up next, <@" + next_user + ">! Type .tag followed by your poem!")
+            if (re.search('tandem', poetry_tag_mode[message.guild.id])):
+                await send_message(message, "Thank you for your line!")
+                poetry_tag_current_user[message.guild.id] = poetry_tag_current_user[message.guild.id] + 1
+                if poetry_tag_current_user[message.guild.id] >= len(poetry_tag_users[message.guild.id]):
+                    poetry_tag_current_user[message.guild.id] = 0
+                poetry_tag_tandem_poem[message.guild.id] = poetry_tag_tandem_poem[message.guild.id] + message.content.replace(".tag ","") + "\n"
+                next_user = poetry_tag_users[message.guild.id][poetry_tag_current_user[message.guild.id]].id
+                await send_message(message, "You're up next, <@" + str(next_user) + ">! Type .tag followed by your line!")
+        elif (command == 'finishtag'):
+            if not poetry_tag_event[message.guild.id]:
+                await send_message(message, "No poetry tag currently running!")
+                return
+            if (re.search('tandem', poetry_tag_mode[message.guild.id])):
+                await send_message(message, "Awesome! Here is your completed poem!\n\n" + poetry_tag_tandem_poem[message.guild.id])
+            if (re.search('tag', poetry_tag_mode[message.guild.id])):
+                await send_message(message, "Awesome! Use .savepost if you'd like to save your poem!")
+            poetry_tag_users[message.guild.id] = " "
+            poetry_tag_event[message.guild.id] = False
+            poetry_tag_topic[message.guild.id] = " "
+            poetry_tag_current_user[message.guild.id] = 0
+            poetry_tag_mode[message.guild.id] = " "
+            poetry_tag_tandem_poem[message.guild.id] = " " 
         elif (command == 'loadwords'):
             if not admin_check(message.author.id):
                 await send_message(message, "Admin command only!")
@@ -1552,9 +1523,10 @@ async def on_message(message):
             language = command_string[1]
             parsed_string = message.content.replace(".translate ","")
             parsed_string = parsed_string.replace(command_string[1] + " ","")
-            get_translation = "SELECT DISTINCT Word,PartOfSpeech,Language,Definitions FROM DictionaryDefs WHERE (Language=%s AND Definitions LIKE '% " + parsed_string + " %') OR (Language=%s AND Definitions LIKE '" + parsed_string + "%');"
-            translation_term = (language, language)
-            records = select_sql(get_translation, translation_term)
+            get_translation = "SELECT DISTINCT Word,PartOfSpeech,Language,Definitions FROM DictionaryDefs WHERE (Language=%s AND Definitions LIKE '% " + parsed_string + " %') OR (Language=%s AND Definitions LIKE '" + parsed_string + "%') OR (Language=%s AND Definitions=%s);"
+            translation_term = (language, language, language, parsed_string)
+            async with message.channel.typing():
+                records = select_sql(get_translation, translation_term)
             response = "**" + parsed_string + "** *Translated to " + language + "*\n\n"
             if len(records) == 0:
                 await send_message(message, "No translation found in " + language + " for " + parsed_string + ".")
@@ -1580,4 +1552,4 @@ async def on_message(message):
             await send_message(message, "Invalid command.\n\nType **.info** for a list of available commands.")
     else:
         pass
-client.run('REDACTED')    
+client.run('NREDACTED')    
